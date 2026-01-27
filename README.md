@@ -3,7 +3,7 @@ Type description here
 
 ## Team Member
 - Christopher Vandergriff 
--
+- Denvour Davis
 -
 -
 
