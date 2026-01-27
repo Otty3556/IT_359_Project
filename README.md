@@ -8,3 +8,4 @@ Type description here
 -
 
 ## Full Project Idea
+Place your description and details here.
