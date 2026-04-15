@@ -1,11 +1,107 @@
-# New_Repo_IT_359_Project
-An email analysis and credibility assessment tool used to provide the user with a credibility rating and a logical AI-powered explanation based on the contents of the email.
+# AI-Assisted Email Credibility & Phishing Detection Tool
 
-## Team Member
-- Christopher Vandergriff 
-- Denvour Davis
-- Bo
-- James
+## Overview
+This project is a Python-based cybersecurity tool designed to analyze `.eml` email files and determine whether an email is legitimate or potentially malicious.
 
-## Full Project Idea
-This project would have us creating a Python based application that reads data from .eml files and extracts key information from the email headers and message content, including sender information, domains, and message body text. From that data, the program will give users a credibility rating for the email and flag any malicious behavior found. The program would consider factors such as grammatical errors, urgent/manipulative wording, sender and domain mismatches, as well as common social engineering tropes used in phishing attacks. AI will then be used to explain to the user why the email might be a phishing attempt, highlighting key points of the email that stand out and look suspicious. This project models the analysis of real world phising attacks and demonstrates how attackers might leverage the art of social engineering to exploit users. Some consideration will have to be given to minimizing our false positives and mitigate the bias that is introduced by our training data.
+The system extracts key technical and textual features from emails, assigns a credibility score, and provides an AI-generated explanation of suspicious indicators. The goal is not only detection, but also education, helping users understand how phishing attacks work.
+
+---
+
+## Features
+- Parse `.eml` email files
+- Extract sender, subject, body, and links
+- Detect phishing indicators such as:
+  - Sender and reply-to mismatches
+  - Suspicious URLs
+  - Urgent or manipulative language
+  - Requests for sensitive information
+  - Grammar irregularities
+- Generate a credibility/risk score
+- AI-powered explanation of detected threats
+
+---
+
+## How It Works
+1. The system reads a `.eml` file
+2. Extracts header and body content
+3. Identifies phishing indicators using rule-based logic
+4. Assigns a credibility score based on findings
+5. Uses AI to explain suspicious elements in plain language
+
+This hybrid approach improves transparency and avoids relying solely on AI.
+
+---
+
+## AI Usage
+The AI model is used as an interpretive layer, not the primary detector.
+
+It analyzes:
+- tone (urgency, fear, authority)
+- language patterns
+- social engineering tactics
+- message structure
+
+It then explains why the email may be suspicious by highlighting red flags such as:
+- deceptive wording
+- impersonation attempts
+- emotional manipulation
+
+The system also considers:
+- reducing false positives
+- avoiding bias toward non-standard writing styles
+
+---
+
+## Tech Stack
+- Python
+- Email parsing libraries
+- Regex / string analysis
+- AI / NLP model
+- GitHub
+
+---
+
+## Project Structure
+IT_359_Project/
+│── main.py
+│── parser/
+│── detection/
+│── ai_analysis/
+│── samples/
+│── README.md
+│── requirements.txt
+
+---
+
+## Team Members
+- **Bosun Moibi** – Project Manager & Integration Lead  
+- **Denvour Davis** – Backend Developer (Parsing & Logic)  
+- **Christopher Vandergriff** – AI/NLP Implementation  
+- **James** – Testing & Documentation  
+
+---
+
+## Objectives
+- Build a functional email parser
+- Detect phishing and social engineering patterns
+- Generate credibility scores
+- Provide clear AI explanations
+- Test against real and fake email samples
+
+---
+
+## Future Improvements
+- Real-time email scanning
+- Web dashboard interface
+- Larger dataset testing
+- Improved AI accuracy
+
+---
+
+## Disclaimer
+This project is for educational purposes. It is designed to demonstrate phishing detection techniques and should not be used as a standalone security solution.
+
+---
+
+## Author
+IT 359 Cybersecurity Project – Illinois State University
