@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<!--
+  PhishScan - Email Credibility & Phishing Detection Tool
+  IT 357 - Network Security | Group Project
+  Authors: James Yahr, Tim Lomande
+  
+  Description:
+    A browser-based tool that accepts a .eml email file, performs static analysis
+    to detect common phishing indicators, generates a risk score (0-100), and sends
+    the results to a locally running LM Studio instance for AI-assisted explanation.
+
+  How it works:
+    1. User loads a .eml file via drag-and-drop or file picker
+    2. The EML parser extracts headers, body, and URLs from the raw file
+    3. The static analysis engine scores the email across three categories:
+         - Header checks (spoofing, auth failures, mismatches)
+         - Content checks (urgency language, PII requests)
+         - Link checks (suspicious URLs, shorteners, raw IPs)
+    4. Results are sent to LM Studio's local API for an AI-generated explanation
+    5. The AI explains the verdict but does not override the static score
+
+  Requirements:
+    - A modern browser (Chrome recommended)
+    - Must be served over HTTP (e.g., python -m http.server or VS Code Live Server)
+      Reason: browsers block fetch() calls from file:// origins
+    - LM Studio running locally with a model loaded and CORS enabled
+      LM Studio default endpoint: http://localhost:1234/v1/chat/completions
+
+  Scoring Thresholds:
+    0-34  = CLEAN
+    35-69 = SUSPICIOUS
+    70+   = PHISHING
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhishScan - Email Threat Analyzer</title>
+<style>
+  /* ── Base Layout ────────────────────────────────────────────────────────── */
+  body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 0 20px; background: #f5f5f5; color: #222; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  h1 span { color: #c00; }
+  .subtitle { color: #666; font-size: 13px; margin-bottom: 20px; }
+
+  /* ── Card Sections ──────────────────────────────────────────────────────── */
+  section { background: #fff; border: 1px solid #ccc; padding: 16px; margin-bottom: 16px; }
+  section h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 12px 0; color: #444; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+
+  /* ── Form Controls ──────────────────────────────────────────────────────── */
+  label { font-size: 12px; font-weight: bold; display: block; margin-bottom: 3px; }
+  input[type="text"] { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #ccc; font-size: 13px; margin-bottom: 8px; }
+  button { padding: 7px 16px; font-size: 13px; cursor: pointer; border: 1px solid #888; background: #eee; }
+  button:hover { background: #ddd; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.primary { background: #c00; color: #fff; border-color: #a00; font-weight: bold; }
+  button.primary:hover { background: #a00; }
+
+  /* ── LM Studio Status Line ──────────────────────────────────────────────── */
+  #statusLine { font-size: 12px; color: #666; margin-top: 6px; }
+  #statusLine.ok  { color: green; }
+  #statusLine.err { color: #c00; }
+
+  /* ── File Drop Zone ─────────────────────────────────────────────────────── */
+  /* The hidden file input overlays the entire drop zone so clicks hit it too */
+  #dropZone { border: 2px dashed #aaa; padding: 30px; text-align: center; cursor: pointer; background: #fafafa; position: relative; }
+  #dropZone:hover, #dropZone.drag-over { border-color: #c00; background: #fff5f5; }
+  #dropZone.has-file { border-style: solid; border-color: green; }
+  #dropZone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  #dropZone p { margin: 0; font-size: 14px; }
+  #dropZone .hint { font-size: 12px; color: #888; margin-top: 4px; }
+
+  /* ── Header Metadata Table ──────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+  td:first-child { font-weight: bold; color: #555; width: 110px; white-space: nowrap; }
+  td.flag { color: #c00; } /* Red text for suspicious header values */
+
+  /* ── Risk Score Display ─────────────────────────────────────────────────── */
+  #scoreBox { display: flex; align-items: center; gap: 24px; }
+  #scoreNum { font-size: 48px; font-weight: bold; line-height: 1; color: #aaa; }
+  #scoreNum.clean      { color: green; }
+  #scoreNum.suspicious { color: orange; }
+  #scoreNum.phishing   { color: #c00; }
+  #verdictBadge { font-size: 18px; font-weight: bold; color: #aaa; }
+  #verdictBadge.CLEAN      { color: green; }
+  #verdictBadge.SUSPICIOUS { color: orange; }
+  #verdictBadge.PHISHING   { color: #c00; }
+  .score-sub { font-size: 12px; color: #666; margin-top: 4px; }
+
+  /* ── Threat Indicator Items ─────────────────────────────────────────────── */
+  /* Left border color indicates severity: red=high, orange=med, green=low */
+  .indicator { padding: 7px 10px; margin-bottom: 5px; border-left: 3px solid #ccc; font-size: 13px; background: #fafafa; }
+  .indicator.high { border-color: #c00; }
+  .indicator.med  { border-color: orange; }
+  .indicator.low  { border-color: green; }
+  .badge { display: inline-block; font-size: 10px; font-weight: bold; padding: 1px 5px; border: 1px solid currentColor; margin-right: 6px; }
+  .badge.high { color: #c00; }
+  .badge.med  { color: orange; }
+  .badge.low  { color: green; }
+
+  /* ── Extracted URL List ─────────────────────────────────────────────────── */
+  .link-row { font-size: 12px; font-family: monospace; padding: 4px 8px; background: #fafafa; border: 1px solid #eee; margin-bottom: 3px; word-break: break-all; }
+  .link-row .sus { color: #c00; font-weight: bold; margin-right: 6px; }
+  .link-row .ok  { color: #888; margin-right: 6px; }
+
+  /* ── AI Output Panel ────────────────────────────────────────────────────── */
+  #aiOutput { font-size: 13px; line-height: 1.7; white-space: pre-wrap; min-height: 80px; color: #333; }
+  #aiOutput.placeholder { color: #aaa; font-style: italic; }
+  #aiOutput.thinking    { color: #888; font-family: monospace; font-size: 12px; }
+
+  /* ── Utility ────────────────────────────────────────────────────────────── */
+  .empty { color: #aaa; font-size: 13px; font-style: italic; }
+  .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 200px; }
+</style>
+</head>
+<body>
+
+<h1>Phish<span>Scan</span></h1>
+<p class="subtitle">Email Credibility &amp; Phishing Detection Tool — IT 357 Group Project</p>
+
+<!-- ── LM Studio Connection Config ────────────────────────────────────────── -->
+<!-- User sets the local API endpoint and model name before scanning.         -->
+<!-- Default endpoint matches LM Studio's built-in OpenAI-compatible server.  -->
+<section>
+  <h2>LM Studio Connection</h2>
+  <div class="row">
+    <div>
+      <label>Endpoint</label>
+      <input type="text" id="lmEndpoint" value="http://localhost:1234/v1/chat/completions">
+    </div>
+    <div>
+      <label>Model Name</label>
+      <input type="text" id="lmModel" value="local-model">
+    </div>
+    <div style="flex:0">
+      <label>&nbsp;</label>
+      <button onclick="testConnection()">Test Connection</button>
+    </div>
+  </div>
+  <div id="statusLine">Not connected</div>
+</section>
+
+<!-- ── File Loader ─────────────────────────────────────────────────────────── -->
+<!-- Accepts .eml files via click or drag-and-drop.                            -->
+<!-- A hidden <input type="file"> overlays the entire zone to capture clicks.  -->
+<section>
+  <h2>Load .eml File</h2>
+  <div id="dropZone">
+    <input type="file" id="fileInput" accept=".eml" onchange="handleFile(this.files[0])">
+    <p id="dropTitle">Drop a .eml file here, or click to browse</p>
+    <p class="hint" id="dropSub">Supports RFC 2822 / MIME format</p>
+  </div>
+</section>
+
+<!-- ── Scan Trigger ───────────────────────────────────────────────────────── -->
+<!-- Disabled until a file is loaded. Calls runScan() which runs static        -->
+<!-- analysis first, then sends results to LM Studio for AI explanation.       -->
+<div style="text-align:center; margin-bottom:16px;">
+  <button class="primary" id="scanBtn" disabled onclick="runScan()" style="padding:10px 40px; font-size:15px;">
+    Analyze Email
+  </button>
+</div>
+
+<!-- ── Score + Headers (side by side) ────────────────────────────────────── -->
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+
+  <!-- Risk score panel: shows numeric score, verdict label, and sub-scores   -->
+  <section style="margin:0">
+    <h2>Risk Score</h2>
+    <div id="scoreBox">
+      <div id="scoreNum">--</div>
+      <div>
+        <div id="verdictBadge">Awaiting Scan</div>
+        <div class="score-sub">Header: <span id="sbHeader">0</span> &nbsp;|&nbsp; Content: <span id="sbContent">0</span> &nbsp;|&nbsp; Links: <span id="sbLinks">0</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Email header metadata panel: populated after file load, flags in red   -->
+  <section style="margin:0">
+    <h2>Email Headers</h2>
+    <div id="metaBody"><p class="empty">No file loaded</p></div>
+  </section>
+
+</div>
+
+<!-- ── Threat Indicators ─────────────────────────────────────────────────── -->
+<!-- Each indicator shows a severity badge and description of the finding.    -->
+<section>
+  <h2>Threat Indicators</h2>
+  <div id="indicatorsBody"><p class="empty">Run a scan to detect indicators</p></div>
+</section>
+
+<!-- ── Extracted URLs ────────────────────────────────────────────────────── -->
+<!-- All URLs found in the raw .eml file, flagged SUSPICIOUS or OK.          -->
+<section>
+  <h2>Extracted URLs</h2>
+  <div id="linksBody"><p class="empty">No links extracted yet</p></div>
+</section>
+
+<!-- ── AI Analysis Output ────────────────────────────────────────────────── -->
+<!-- LM Studio's plain-text explanation of the scan verdict.                  -->
+<section>
+  <h2>AI Analysis (LM Studio)</h2>
+  <div id="aiOutput" class="placeholder">AI-generated analysis will appear here after scanning.</div>
+</section>
+
+<script>
+// =============================================================================
+// PhishScan — Main JavaScript
+// =============================================================================
+// All application logic lives here in a single script block.
+// Organized into the following sections:
+//   1. State
+//   2. LM Studio Connection Test
+//   3. File Handling (load, drag-and-drop)
+//   4. EML Parser (headers, body, auth results, links)
+//   5. Static Analysis Engine (scoring + indicators)
+//   6. Render Functions (update the DOM with results)
+//   7. Main Scan Orchestrator (runScan)
+//   8. Utility
+// =============================================================================
+
+
+// =============================================================================
+// 1. STATE
+// =============================================================================
+
+let parsedEmail = null;  // Holds the parsed email object after file load
+let lmConnected = false; // Tracks whether LM Studio responded successfully
+
+
+// =============================================================================
+// 2. LM STUDIO CONNECTION TEST
+// =============================================================================
+// Sends a minimal test message to LM Studio to verify the endpoint and model
+// are reachable before the user tries to run a full scan.
+
+async function testConnection() {
+  const endpoint = document.getElementById('lmEndpoint').value.trim();
+  const model    = document.getElementById('lmModel').value.trim();
+  const status   = document.getElementById('statusLine');
+
+  status.className = '';
+  status.textContent = 'Testing...';
+
+  try {
+    const r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'Reply with only the word: OK' }],
+        max_tokens: 10
+      })
+    });
+    const raw = await r.text();
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' — ' + raw.slice(0, 200));
+    JSON.parse(raw); // Verify it's valid JSON before reporting success
+    lmConnected = true;
+    status.className = 'ok';
+    status.textContent = 'Connected to LM Studio — ' + model;
+  } catch (e) {
+    lmConnected = false;
+    status.className = 'err';
+    status.textContent = 'Connection failed: ' + e.message;
+  }
+}
+
+
+// =============================================================================
+// 3. FILE HANDLING
+// =============================================================================
+// Handles both the file picker (onchange) and drag-and-drop events.
+// Once a file is loaded, it is parsed and the metadata panel is populated.
+
+/**
+ * Called when a file is selected via the file picker or drag-and-drop.
+ * Reads the file as plain text and passes the raw string to parseEml().
+ */
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    parsedEmail = parseEml(e.target.result);
+    renderMeta(parsedEmail);
+    document.getElementById('dropTitle').textContent = '✓ ' + file.name;
+    document.getElementById('dropSub').textContent = 'File loaded — ready to scan';
+    document.getElementById('dropZone').classList.add('has-file');
+    document.getElementById('scanBtn').disabled = false;
+    resetResults(); // Clear any previous scan results
+  };
+  reader.readAsText(file);
+}
+
+// Drag-and-drop event listeners on the drop zone div
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', function()  { dz.classList.remove('drag-over'); });
+dz.addEventListener('drop', function(e) {
+  e.preventDefault();
+  dz.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.name.endsWith('.eml')) handleFile(f);
+});
+
+
+// =============================================================================
+// 4. EML PARSER
+// =============================================================================
+// Parses a raw RFC 2822 .eml file string into a structured object.
+// Handles folded headers, quoted-printable and base64 body encoding,
+// RFC 2047 encoded-word subjects, and URL extraction.
+
+/**
+ * Parses a raw .eml string and returns a structured email object.
+ * @param {string} raw - The full contents of the .eml file
+ * @returns {object} Parsed email with headers, body, auth results, and links
+ */
+function parseEml(raw) {
+  const lines = raw.split(/\r?\n/);
+  const headers = {};
+  let bodyStart = 0, i = 0, currentKey = null;
+
+  // Parse header section line by line until the first blank line (body start)
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line === '') { bodyStart = i + 1; break; }
+
+    // Folded headers (continuation lines start with whitespace)
+    if (/^\s+/.test(line) && currentKey) {
+      headers[currentKey] += ' ' + line.trim();
+    } else {
+      const m = line.match(/^([^:]+):\s*(.*)/);
+      if (m) { currentKey = m[1].toLowerCase(); headers[currentKey] = m[2]; }
+    }
+    i++;
+  }
+
+  const body = lines.slice(bodyStart).join('\n');
+  const decodedBody = decodeBody(body, headers['content-transfer-encoding'] || '');
+
+  // Extract all unique URLs from the entire raw file (headers + body)
+  const links = Array.from(new Set(raw.match(/https?:\/\/[^\s"'<>\]]+/gi) || []));
+
+  return {
+    raw,
+    from:        headers['from']        || '',
+    replyTo:     headers['reply-to']    || '',
+    to:          headers['to']          || '',
+    subject:     decodeRFC2047(headers['subject'] || '(no subject)'),
+    date:        headers['date']        || '',
+    messageId:   headers['message-id'] || '',
+    returnPath:  headers['return-path'] || '',
+    spfResult:   extractAuth(raw, 'spf'),
+    dkimResult:  extractAuth(raw, 'dkim'),
+    dmarcResult: extractAuth(raw, 'dmarc'),
+    body:        decodedBody,
+    links,
+    headers
+  };
+}
+
+/**
+ * Decodes a MIME body based on its Content-Transfer-Encoding header value.
+ * Supports base64 and quoted-printable. Falls back to raw text otherwise.
+ */
+function decodeBody(body, encoding) {
+  if (encoding.toLowerCase().includes('base64')) {
+    try { return atob(body.replace(/\s+/g, '')); } catch { return body; }
+  }
+  if (encoding.toLowerCase().includes('quoted-printable')) {
+    // Remove soft line breaks, then decode =XX hex sequences
+    return body.replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/gi, function(_, h) {
+      return String.fromCharCode(parseInt(h, 16));
+    });
+  }
+  return body;
+}
+
+/**
+ * Decodes RFC 2047 encoded-word strings commonly found in email Subject lines.
+ * Handles both Base64 (=?UTF-8?B?...?=) and QP (=?UTF-8?Q?...?=) encoding.
+ */
+function decodeRFC2047(str) {
+  return str.replace(/=\?([^?]+)\?([BQ])\?([^?]*)\?=/gi, function(_, charset, enc, data) {
+    try {
+      if (enc.toUpperCase() === 'B') return atob(data);
+      return data.replace(/_/g, ' ').replace(/=([0-9A-F]{2})/gi, function(__, h) {
+        return String.fromCharCode(parseInt(h, 16));
+      });
+    } catch { return str; }
+  });
+}
+
+/**
+ * Extracts SPF, DKIM, or DMARC result from the Authentication-Results header.
+ * NOTE: These values come from the .eml file itself — they were written by the
+ * receiving mail server at delivery time. PhishScan does NOT perform live DNS
+ * lookups. If the header is absent, returns 'none'.
+ */
+function extractAuth(raw, type) {
+  const m = raw.match(new RegExp(type + '=([a-z]+)', 'i'));
+  return m ? m[1] : 'none';
+}
+
+
+// =============================================================================
+// 5. STATIC ANALYSIS ENGINE
+// =============================================================================
+// Scores the email across three categories and builds a list of indicators.
+//
+// Scoring breakdown:
+//   Header score  — spoofing, auth failures, domain mismatches, missing fields
+//   Content score — urgency language, PII/credential requests in body
+//   Link score    — suspicious URLs, shorteners, raw IPs, bad TLDs
+//
+// Auth check note:
+//   SPF/DKIM/DMARC scores are intentionally reduced because PhishScan reads
+//   them from the .eml header rather than performing live DNS verification.
+//   They are shown as HIGH severity to inform the user, but contribute fewer
+//   points to avoid skewing the verdict based on unverified data.
+
+/**
+ * Runs all phishing checks on a parsed email object.
+ * @param {object} email - Output of parseEml()
+ * @returns {object} { total, headerScore, contentScore, linkScore, verdict, indicators }
+ */
+function analyzeEmail(email) {
+  const indicators = [];
+  let headerScore = 0, contentScore = 0, linkScore = 0;
+
+  // Caveat appended to all auth-related indicators
+  const authCaveat = '(read from .eml header — no live DNS check performed; treat as corroborating evidence only)';
+
+  // ── Header Checks ──────────────────────────────────────────────────────────
+
+  // Check 1: Reply-To domain mismatch
+  // Phishers often set Reply-To to a different domain so responses go elsewhere
+  if (email.replyTo && email.from) {
+    const fd = extractDomain(email.from), rd = extractDomain(email.replyTo);
+    if (fd && rd && fd !== rd) {
+      headerScore += 30;
+      indicators.push({ level: 'high', label: 'HIGH', text: 'Reply-To domain mismatch: sender is @' + fd + ' but replies go to @' + rd });
+    }
+  }
+
+  // Check 2: Return-Path domain mismatch
+  // The bounce address domain should match the From domain in legitimate email
+  if (email.returnPath && email.from) {
+    const fd = extractDomain(email.from), rpd = extractDomain(email.returnPath);
+    if (fd && rpd && fd !== rpd) {
+      headerScore += 25;
+      indicators.push({ level: 'high', label: 'HIGH', text: 'Return-Path domain (@' + rpd + ') does not match From domain (@' + fd + ')' });
+    }
+  }
+
+  // Check 3: SPF failure (reduced score — see note above)
+  if (['fail','softfail','none'].includes(email.spfResult.toLowerCase())) {
+    headerScore += 8;
+    indicators.push({ level: 'high', label: 'HIGH', text: 'SPF: ' + email.spfResult.toUpperCase() + ' — sending server not authorized for this domain. ' + authCaveat });
+  }
+
+  // Check 4: DKIM failure (reduced score — see note above)
+  if (['fail','none'].includes(email.dkimResult.toLowerCase())) {
+    headerScore += 6;
+    indicators.push({ level: 'high', label: 'HIGH', text: 'DKIM: ' + email.dkimResult.toUpperCase() + ' — message signature absent or invalid. ' + authCaveat });
+  }
+
+  // Check 5: DMARC failure (reduced score — see note above)
+  if (['fail','none'].includes(email.dmarcResult.toLowerCase())) {
+    headerScore += 4;
+    indicators.push({ level: 'med', label: 'MED', text: 'DMARC: ' + email.dmarcResult.toUpperCase() + ' — domain alignment policy failed. ' + authCaveat });
+  }
+
+  // Check 6: Missing Message-ID header
+  // Legitimate mail servers always assign a Message-ID; bulk/phishing tools often skip it
+  if (!email.messageId) {
+    headerScore += 10;
+    indicators.push({ level: 'med', label: 'MED', text: 'No Message-ID header — common in bulk/automated phishing emails' });
+  }
+
+  // ── Content Checks ─────────────────────────────────────────────────────────
+
+  // Check 7: Urgency/manipulation keywords in subject line
+  if (/\b(urgent|verify|suspended|action required|account|confirm|update|click|limited|expire|win|prize|congratulations|security alert|unusual activity|password|login|unusual sign-in|statement|invoice|shipment)\b/i.test(email.subject)) {
+    contentScore += 20;
+    indicators.push({ level: 'med', label: 'MED', text: 'Subject contains urgency/manipulation keywords: "' + email.subject + '"' });
+  }
+
+  // Check 8: Body requests sensitive information (PII, credentials, financial data)
+  if (/\b(password|credit card|ssn|social security|bank account|routing number|pin|cvv|date of birth|login credential|username|mother.{0,10}maiden)\b/i.test(email.body)) {
+    contentScore += 35;
+    indicators.push({ level: 'high', label: 'HIGH', text: 'Body requests sensitive information (credentials, financial data, or PII)' });
+  }
+
+  // Check 9: Threat/urgency language in body (pressure tactics)
+  if (/\b(within 24 hours|immediately|your account.{0,20}(suspended|blocked|locked)|act now|expire|last chance|respond now|24 hours|48 hours|verify now|failure to comply|legal action)\b/i.test(email.body)) {
+    contentScore += 20;
+    indicators.push({ level: 'med', label: 'MED', text: 'Body uses urgency or threat language to pressure immediate action' });
+  }
+
+  // ── Link Checks ────────────────────────────────────────────────────────────
+
+  // Check 10: Suspicious URL patterns
+  // Each link is tested against a list of known phishing URL patterns.
+  // Only the first matching pattern per link is reported to avoid duplicates.
+  const suspPatterns = [
+    { re: /http:\/\//i,                                                 label: 'Unencrypted HTTP link (no HTTPS)' },
+    { re: /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/,                       label: 'Link uses raw IP address instead of domain' },
+    { re: /bit\.ly|tinyurl|goo\.gl|t\.co|ow\.ly|cutt\.ly|short\.gy/i, label: 'URL shortener detected — destination hidden' },
+    { re: /\.tk|\.ml|\.ga|\.cf|\.gq/i,                                 label: 'Link uses a free/commonly-abused TLD (.tk, .ml, etc.)' },
+    { re: /login|signin|verify|update|secure|account|confirm/i,         label: 'Link contains phishing-related path keyword' },
+    { re: /@/,                                                           label: 'URL contains @ symbol — destination may be obscured' },
+  ];
+  for (const link of email.links) {
+    for (const p of suspPatterns) {
+      if (p.re.test(link)) {
+        linkScore += 15;
+        indicators.push({ level: 'high', label: 'HIGH', text: p.label + ': ' + link.slice(0, 80) });
+        break; // Only report the first match per link
+      }
+    }
+  }
+
+  // Check 11: Excessive link count (spray and redirect technique)
+  if (email.links.length > 8) {
+    linkScore += 10;
+    indicators.push({ level: 'med', label: 'MED', text: 'High number of links (' + email.links.length + ') — possible spray/redirect attack' });
+  }
+
+  // Check 12: Brand impersonation in display name
+  // Checks if a trusted brand name appears in the From field but NOT in the actual domain
+  if (/paypal|amazon|microsoft|google|apple|netflix|bank of america|wells fargo|chase|irs|fedex|ups|dhl/i.test(email.from) &&
+      !/paypal|amazon|microsoft|google|apple|netflix|bank of america|wells fargo|chase|irs|fedex|ups|dhl/i.test(extractDomain(email.from) || '')) {
+    headerScore += 30;
+    indicators.push({ level: 'high', label: 'HIGH', text: 'Display name impersonates a trusted brand but the sending domain does not match' });
+  }
+
+  // ── Final Score ────────────────────────────────────────────────────────────
+
+  // Add a CLEAR indicator if no issues were found
+  if (indicators.length === 0) {
+    indicators.push({ level: 'low', label: 'CLEAR', text: 'No static phishing indicators detected' });
+  }
+
+  const total = Math.min(100, headerScore + contentScore + linkScore);
+  const verdict = total >= 70 ? 'PHISHING' : total >= 35 ? 'SUSPICIOUS' : 'CLEAN';
+
+  return {
+    total,
+    headerScore:  Math.min(100, headerScore),
+    contentScore: Math.min(100, contentScore),
+    linkScore:    Math.min(100, linkScore),
+    verdict,
+    indicators
+  };
+}
+
+/**
+ * Extracts the domain portion from an email address string.
+ * e.g., "John Doe <john@example.com>" → "example.com"
+ */
+function extractDomain(addr) {
+  const m = addr.match(/@([\w.-]+)/);
+  return m ? m[1].toLowerCase() : null;
+}
+
+
+// =============================================================================
+// 6. RENDER FUNCTIONS
+// =============================================================================
+// These functions update the DOM with results after parsing or scanning.
+
+/**
+ * Populates the Email Headers panel with key fields from the parsed email.
+ * Flags suspicious values (domain mismatches, auth failures) in red.
+ */
+function renderMeta(email) {
+  // Check if the From display name impersonates a known brand
+  const isSpoofed = /paypal|amazon|microsoft|google|apple|netflix|irs|fedex|ups/i.test(email.from) &&
+                    !/paypal|amazon|microsoft|google|apple|netflix|irs|fedex|ups/i.test(extractDomain(email.from) || '');
+
+  const rows = [
+    { k: 'From',        v: email.from,                     f: isSpoofed },
+    { k: 'Reply-To',    v: email.replyTo || '—',           f: !!(email.replyTo && extractDomain(email.replyTo) !== extractDomain(email.from)) },
+    { k: 'To',          v: email.to },
+    { k: 'Subject',     v: email.subject },
+    { k: 'Date',        v: email.date },
+    { k: 'Return-Path', v: email.returnPath || '—',        f: !!(email.returnPath && extractDomain(email.returnPath) !== extractDomain(email.from)) },
+    { k: 'SPF',         v: email.spfResult,                f: ['fail','softfail','none'].includes(email.spfResult.toLowerCase()) },
+    { k: 'DKIM',        v: email.dkimResult,               f: ['fail','none'].includes(email.dkimResult.toLowerCase()) },
+    { k: 'DMARC',       v: email.dmarcResult,              f: ['fail','none'].includes(email.dmarcResult.toLowerCase()) },
+    { k: 'Message-ID',  v: email.messageId || '(missing)', f: !email.messageId },
+  ];
+
+  document.getElementById('metaBody').innerHTML = '<table>' + rows.map(function(r) {
+    return '<tr><td>' + r.k + '</td><td' + (r.f ? ' class="flag"' : '') + '>' + escHtml(r.v) + '</td></tr>';
+  }).join('') + '</table>';
+}
+
+/**
+ * Updates the score panel, verdict badge, indicators list, and links list
+ * with the results from analyzeEmail().
+ */
+function renderResults(analysis, email) {
+  // Update score number and apply color class based on verdict
+  const sn = document.getElementById('scoreNum');
+  sn.textContent = analysis.total;
+  sn.className = analysis.total >= 70 ? 'phishing' : analysis.total >= 35 ? 'suspicious' : 'clean';
+
+  // Update verdict badge
+  const vb = document.getElementById('verdictBadge');
+  vb.textContent = analysis.verdict;
+  vb.className = analysis.verdict;
+
+  // Update sub-score breakdown
+  document.getElementById('sbHeader').textContent  = analysis.headerScore;
+  document.getElementById('sbContent').textContent = analysis.contentScore;
+  document.getElementById('sbLinks').textContent   = analysis.linkScore;
+
+  // Render indicator items
+  document.getElementById('indicatorsBody').innerHTML = analysis.indicators.map(function(ind) {
+    return '<div class="indicator ' + ind.level + '"><span class="badge ' + ind.level + '">' + ind.label + '</span>' + escHtml(ind.text) + '</div>';
+  }).join('');
+
+  // Render extracted URL list with SUSPICIOUS / OK labels
+  document.getElementById('linksBody').innerHTML = email.links.length
+    ? email.links.map(function(l) {
+        const sus = /http:\/\/|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|bit\.ly|tinyurl|\.tk|\.ml|login|signin|verify|@/i.test(l);
+        return '<div class="link-row"><span class="' + (sus ? 'sus' : 'ok') + '">[' + (sus ? 'SUSPICIOUS' : 'OK') + ']</span>' + escHtml(l) + '</div>';
+      }).join('')
+    : '<p class="empty">No links found in email</p>';
+}
+
+/**
+ * Resets all result panels to their default empty state.
+ * Called whenever a new file is loaded.
+ */
+function resetResults() {
+  document.getElementById('indicatorsBody').innerHTML = '<p class="empty">Run a scan to detect indicators</p>';
+  document.getElementById('linksBody').innerHTML = '<p class="empty">No links extracted yet</p>';
+  document.getElementById('aiOutput').className = 'placeholder';
+  document.getElementById('aiOutput').textContent = 'AI-generated analysis will appear here after scanning.';
+  document.getElementById('scoreNum').textContent = '--';
+  document.getElementById('scoreNum').className = '';
+  document.getElementById('verdictBadge').textContent = 'Awaiting Scan';
+  document.getElementById('verdictBadge').className = '';
+  ['sbHeader','sbContent','sbLinks'].forEach(function(id) { document.getElementById(id).textContent = '0'; });
+}
+
+
+// =============================================================================
+// 7. MAIN SCAN ORCHESTRATOR
+// =============================================================================
+// Called when the user clicks "Analyze Email".
+// Step 1: Run static analysis and render results immediately
+// Step 2: Build a structured prompt from the results
+// Step 3: Send to LM Studio and display the AI explanation
+
+async function runScan() {
+  if (!parsedEmail) return;
+
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true;
+  btn.textContent = 'Analyzing...';
+
+  // Step 1: Static analysis (runs locally, no network needed)
+  const analysis = analyzeEmail(parsedEmail);
+  renderResults(analysis, parsedEmail);
+
+  // Step 2: Show loading state in AI panel
+  const aiOut = document.getElementById('aiOutput');
+  aiOut.className = 'thinking';
+  aiOut.textContent = 'Sending to LM Studio...';
+
+  const endpoint = document.getElementById('lmEndpoint').value.trim();
+  const model    = document.getElementById('lmModel').value.trim();
+
+  // Sanitize email content before injecting into the prompt string.
+  // Strips ASCII control characters that can corrupt the JSON payload.
+  function clean(str) {
+    return String(str || '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '').slice(0, 500);
+  }
+
+  // Build the structured prompt using plain string concatenation (not template
+  // literals) to avoid corruption from backticks in raw email content.
+  const prompt = [
+    'You are analyzing a potentially malicious email. Here is a structured summary:',
+    '', 'RISK SCORE: ' + analysis.total + '/100', 'VERDICT: ' + analysis.verdict, '',
+    'HEADER ANALYSIS:',
+    'From: '             + clean(parsedEmail.from),
+    'Reply-To: '         + clean(parsedEmail.replyTo || 'none'),
+    'Return-Path: '      + clean(parsedEmail.returnPath || 'none'),
+    'SPF: '              + parsedEmail.spfResult + ' | DKIM: ' + parsedEmail.dkimResult + ' | DMARC: ' + parsedEmail.dmarcResult,
+    'Subject: '          + clean(parsedEmail.subject),
+    'Message-ID present: ' + (parsedEmail.messageId ? 'yes' : 'NO'),
+    '', 'DETECTED INDICATORS (' + analysis.indicators.length + '):',
+    analysis.indicators.map(function(i) { return '[' + i.label + '] ' + i.text; }).join('\n'),
+    '', 'EXTRACTED LINKS (' + parsedEmail.links.length + '):',
+    parsedEmail.links.slice(0, 10).join('\n') || 'none',
+    '', 'EMAIL BODY (first 600 chars):', clean(parsedEmail.body), '',
+    // Instructions for the model — it must explain the score, not override it
+    'The static analysis engine has already scored this email. Your job is to explain and contextualize that score — do NOT override or contradict it.',
+    'CLEAN (score below 35): Explain why the email appears legitimate. Note anything mildly worth being aware of, but be clear it is not a threat.',
+    'SUSPICIOUS (score 35-69): Explain what is ambiguous, why caution is warranted, and what the recipient should watch for.',
+    'PHISHING (score 70+): Explain the attack type, the attacker goal, the most critical indicators, and exactly what the recipient should do.',
+    '', 'Base your entire response on the verdict and indicators above. Write in plain paragraphs only. No bullet points, no markdown, no headers.'
+  ].join('\n');
+
+  // Step 3: Send to LM Studio
+  try {
+    const r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          {
+            role: 'system',
+            // System prompt keeps the model in a neutral analyst role.
+            // "Do not override the verdict" is the key constraint here.
+            content: 'You are a neutral email security analyst. Your job is to interpret and explain the results of an automated phishing detection scan. You do not override or contradict the scan verdict — you explain it. Be balanced and accurate. If an email scores clean, say so clearly. Write in plain paragraphs only — no markdown, no bullet points, no headers.'
+          },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 1500,
+        temperature: 0.3  // Low temperature for consistent, factual output
+      })
+    });
+
+    // Read as text first so we can show the raw response if JSON parsing fails
+    const rawText = await r.text();
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' — ' + rawText.slice(0, 300));
+
+    let d;
+    try {
+      d = JSON.parse(rawText);
+    } catch (pe) {
+      throw new Error('JSON parse failed: ' + pe.message + '\nRaw: ' + rawText.slice(0, 300));
+    }
+
+    const reply = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content)
+      ? d.choices[0].message.content.trim()
+      : '(model returned empty response)';
+
+    aiOut.className = '';
+    aiOut.textContent = reply;
+
+    // Update connection status on success
+    const s = document.getElementById('statusLine');
+    s.className = 'ok';
+    s.textContent = 'Connected to LM Studio — ' + model;
+    lmConnected = true;
+
+  } catch(e) {
+    // Static analysis already ran — show its results even if AI fails
+    aiOut.className = '';
+    aiOut.textContent = '[LM Studio error]\n' + e.message +
+      '\n\nStatic analysis completed — ' + analysis.indicators.length +
+      ' indicator(s) found. Score: ' + analysis.total + '/100 — Verdict: ' + analysis.verdict;
+
+    const s = document.getElementById('statusLine');
+    s.className = 'err';
+    s.textContent = 'LM Studio error: ' + e.message.slice(0, 80);
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Analyze Email';
+}
+
+
+// =============================================================================
+// 8. UTILITY
+// =============================================================================
+
+/**
+ * Escapes HTML special characters to prevent XSS when rendering email content.
+ * All user-facing output from parsed email data must go through this function.
+ */
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>
