@@ -1,0 +1,82 @@
+From: "PayPal Security Team" <security@paypal-accounts-verification.com>
+To: james.yahr@gmail.com
+Reply-To: support@paypa1-help-desk.net
+Return-Path: <bounce@bulk-mailer-srv19.ru>
+Subject: =?UTF-8?B?W1VyZ2VudF0gWW91ciBQYXlQYWwgQWNjb3VudCBIYXMgQmVlbiBTdXNwZW5kZWQ=?=
+Date: Mon, 21 Apr 2026 03:47:12 -0500
+Message-ID:
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+X-Mailer: PHPMailer 5.2.0
+X-Originating-IP: 185.234.219.47
+Authentication-Results: mx.google.com;
+       spf=fail (google.com: domain of security@paypal-accounts-verification.com does not designate 185.234.219.47 as permitted sender) smtp.mailfrom=security@paypal-accounts-verification.com;
+       dkim=none;
+       dmarc=fail (p=REJECT sp=REJECT dis=QUARANTINE) header.from=paypal-accounts-verification.com
+
+<html>
+<body style=3D"font-family: Arial, sans-serif; background: #f4f4f4; padding:=
+ 20px;">
+<table width=3D"600" align=3D"center" style=3D"background:#ffffff; padding:=
+30px; border:1px solid #dddddd;">
+<tr><td>
+
+<img src=3D"http://paypal-accounts-verification.com/assets/paypal-logo.png"=
+ alt=3D"PayPal" width=3D"120"><br><br>
+
+<h2 style=3D"color:#cc0000;">Your Account Has Been Suspended</h2>
+
+<p>Dear Valued Customer,</p>
+
+<p>We have detected <strong>unusual sign-in activity</strong> on your PayPal=
+ account. As a security measure, your account access has been <strong>tempor=
+arily suspended</strong> pending verification.</p>
+
+<p>You must verify your account information <strong>within 24 hours</strong>=
+ or your account will be <strong>permanently closed</strong> and any pending=
+ funds will be held for 180 days per our user agreement.</p>
+
+<p>Please confirm your identity by providing the following:</p>
+<ul>
+  <li>Full name and date of birth</li>
+  <li>Credit card number and CVV</li>
+  <li>Online banking username and password</li>
+  <li>Social Security Number (last 4 digits for verification)</li>
+</ul>
+
+<p style=3D"text-align:center; margin: 30px 0;">
+  <a href=3D"http://bit.ly/3xPay-VerifyNow"
+     style=3D"background:#003087; color:#ffffff; padding:14px 32px; text-dec=
+oration:none; font-size:16px; font-weight:bold;">
+    Verify My Account Now
+  </a>
+</p>
+
+<p>Alternatively, visit our secure portal:<br>
+<a href=3D"http://185.234.219.47/paypal/login/verify?token=3Dabc123&redir=3D=
+https://paypal.com">http://185.234.219.47/paypal/login/verify</a></p>
+
+<p>If you do not act now, legal action may be taken and your account balance=
+ will be frozen. Failure to comply within the stated timeframe will result i=
+n permanent suspension.</p>
+
+<p>For immediate assistence please contact us:<br>
+<a href=3D"http://tinyurl.com/paypal-urgent-help">http://tinyurl.com/paypal-=
+urgent-help</a></p>
+
+<p>Thank you for you're cooperation.</p>
+
+<p>Regards,<br>
+<strong>PayPal Accounts Security Departement</strong><br>
+PayPal, Inc. | 2211 North First Street | San Jose, CA</p>
+
+<hr>
+<p style=3D"font-size:10px; color:#999;">To unsubscribe click here:
+<a href=3D"http://paypal-accounts-verification.com/unsub?id=3D9182736450">u=
+nsubscribe</a></p>
+
+</td></tr>
+</table>
+</body>
+</html>
