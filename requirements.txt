@@ -1,1 +1,23 @@
-
+# PhishScan — Requirements
+# -------------------------------------------------------
+# PhishScan is a single HTML file with no package dependencies.
+# No pip install or npm install is required to run the tool.
+#
+# Runtime requirements:
+#   - A modern web browser (Chrome recommended)
+#   - A local HTTP server to serve the file (choose one):
+#
+#       Python 3 (built-in):
+#           python -m http.server 8080
+#
+#       Node.js:
+#           npx serve .
+#
+#       VS Code:
+#           Live Server extension -> Right-click PhishScan.html -> Open with Live Server
+#
+# AI Analysis:
+#   - LM Studio desktop application: https://lmstudio.ai
+#   - Any chat-capable GGUF model loaded in LM Studio
+#   - CORS must be enabled in LM Studio server settings
+#   - Default endpoint: http://localhost:1234/v1/chat/completions
