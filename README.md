@@ -77,7 +77,12 @@ Opening PhishScan.html by double-clicking it will cause the LM Studio connection
    cd src
    python -m http.server 8080
 
-4. Open in your browser
+   OR
+
+   cd src
+   npx serve .
+
+5. Open in your browser
 
    http://localhost:8080/PhishScan.html
 
