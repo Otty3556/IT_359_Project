@@ -63,7 +63,7 @@ Opening PhishScan.html by double-clicking it will cause the LM Studio connection
    git clone https://github.com/your-username/PhishScan.git
    cd PhishScan
 
-2. Set up LM Studio (optional, required only for AI analysis)
+2. Set up LM Studio
 
    - Download and install LM Studio from https://lmstudio.ai
    - Download any chat-capable model (e.g. Llama 3, Mistral, Phi-3)
