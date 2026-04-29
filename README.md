@@ -1,6 +1,6 @@
 # AI-Assisted Email Credibility & Phishing Detection Tool - PhishScan
 
-Video Presentation: URL
+Video Presentation: https://www.youtube.com/watch?v=Gxzxe_PC6-o
 
 ---
 
@@ -43,7 +43,7 @@ Christopher Vandergriff
 PhishScan has no npm packages, no Python libraries, and no build step. It is a single .html file, using JavaScript for all of the built-in logic.;
 
 Runtime requirements:
-- A modern web browser (Chrome recommended)
+- A web browser
 - LM Studio - for the AI explanation feature, download at https://lmstudio.ai
 
 To serve the file locally, choose one of the following:
@@ -138,6 +138,16 @@ includes an explicit caveat in its description.
 A test file is included at docs/test_phishing.eml for testing purposes. It is a synthetic
 phishing email designed to trigger multiple indicators and should produce a score in the 90+
 PHISHING range.
+
+
+
+Test Phishing Email
+<img width="766" height="837" alt="image" src="https://github.com/user-attachments/assets/961ffe37-9bf4-4f08-99cf-7f5a4441a43d" />
+
+Test Legitimate Email
+<img width="780" height="902" alt="image" src="https://github.com/user-attachments/assets/54b17537-d1ce-4c41-a6fa-04c3ad201e3b" />
+
+
 
 ---
 
