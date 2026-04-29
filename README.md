@@ -8,7 +8,7 @@ Video Presentation: URL
 
 PhishScan is a browser-based email threat analysis tool. It accepts a standard .eml email file, performs automated static analysis against twelve known phishing indicators, generates a numeric risk score from 0-100, and uses a locally hosted large language model via LM Studio to produce a plain-English explanation of the findings.
 
-The goal is twofold: detection and education. PhishScan does not just flag suspicious emails — it explains why they are suspicious, helping users recognize similar attacks in the future. All analysis runs locally. No email content is ever sent to an external server.
+The goal is twofold: detection and education. PhishScan does not just flag suspicious emails; it explains why they are suspicious, helping users recognize similar attacks in the future. All analysis runs locally. No email content is ever sent to an external server.
 
 ---
 
@@ -34,7 +34,7 @@ Christopher Vandergriff
   - Suspicious URLs (shorteners, raw IPs, unencrypted HTTP, abused TLDs)
 - Generate a 0-100 risk score with CLEAN / SUSPICIOUS / PHISHING verdict
 - AI-powered plain-English explanation via LM Studio (local, private)
-- Graceful fallback — static analysis always runs even if LM Studio is offline
+- Graceful fallback - static analysis always runs even if LM Studio is offline
 
 ---
 
@@ -44,7 +44,7 @@ PhishScan has no npm packages, no Python libraries, and no build step. It is a s
 
 Runtime requirements:
 - A modern web browser (Chrome recommended)
-- LM Studio — for the AI explanation feature, download at https://lmstudio.ai
+- LM Studio - for the AI explanation feature, download at https://lmstudio.ai
 
 To serve the file locally, choose one of the following:
 - Python 3:  python -m http.server 8080
@@ -85,14 +85,14 @@ Opening PhishScan.html by double-clicking it will cause the LM Studio connection
 
 ## Usage Guide
 
-Step 1 — Connect to LM Studio
+Step 1 - Connect to LM Studio
 Enter your LM Studio endpoint and model name at the top of the page, then click Test Connection.
 - Default endpoint: http://localhost:1234/v1/chat/completions
 - Model name: whatever model you have loaded in LM Studio
 
 If you skip this step, static analysis will still run. You just will not get the AI explanation.
 
-Step 2 — Load an email file
+Step 2 - Load an email file
 Drag and drop a .eml file onto the drop zone, or click it to browse.
 The email headers panel will populate immediately.
 
@@ -101,7 +101,7 @@ How to export a .eml file:
 - Outlook: File, Save As, or drag the email to your desktop
 - Thunderbird: Right-click the email, select Save As
 
-Step 3 — Analyze
+Step 3 - Analyze
 Click Analyze Email. The tool will run static analysis and display the risk score, verdict,
 indicators, and extracted URLs instantly. It will then send the results to LM Studio and
 display the AI explanation once it responds.
@@ -111,14 +111,14 @@ display the AI explanation once it responds.
 ## Reading the Results
 
 Risk Score Thresholds:
-- 0 to 34:   CLEAN      — No significant indicators detected
-- 35 to 69:  SUSPICIOUS — Ambiguous indicators, proceed with caution
-- 70 to 100: PHISHING   — Multiple high-confidence indicators present
+- 0 to 34:   CLEAN      - No significant indicators detected
+- 35 to 69:  SUSPICIOUS - Ambiguous indicators, proceed with caution
+- 70 to 100: PHISHING   - Multiple high-confidence indicators present
 
 Indicator Severity:
-- HIGH  — Strong phishing signal
-- MED   — Moderate signal
-- LOW   — Minor or no issues
+- HIGH  - Strong phishing signal
+- MED   - Moderate signal
+- LOW   - Minor or no issues
 
 SPF / DKIM / DMARC Note:
 These results are read from the Authentication-Results header already present in the .eml file.
